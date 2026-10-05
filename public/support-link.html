@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>رابط الدعم · Support Link 3D Liquid Fire</title>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@700;900&display=swap" rel="stylesheet">
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        html, body {
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+            background: transparent !important;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Cairo', sans-serif;
+        }
+
+        .stage {
+            position: fixed;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: transform 0.3s ease, align-items 0.3s ease, justify-content 0.3s ease;
+        }
+
+        .stage-inner {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: transform 0.3s ease;
+        }
+
+        .stage video {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            display: block;
+            background: transparent;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.4s ease;
+            will-change: opacity, filter;
+        }
+
+        .stage video.is-active {
+            opacity: 1;
+        }
+
+        /* Support Link Custom Subtitle text if enabled */
+        .custom-subtitle {
+            position: absolute;
+            bottom: 12%;
+            background: rgba(10, 10, 20, 0.75);
+            color: #fff;
+            padding: 6px 20px;
+            border-radius: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            font-size: 18px;
+            font-weight: 900;
+            letter-spacing: 1px;
+            text-shadow: 0 0 10px rgba(255, 69, 0, 0.6);
+            display: none;
+            z-index: 20;
+            backdrop-filter: blur(8px);
+        }
+
+        .custom-subtitle.show {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="stage" id="stage">
+        <div class="stage-inner" id="stageInner">
+            <video
+                id="supportLinkVideoA"
+                class="is-active"
+                src="/videos/dlink-liquid-red-transparent.webm"
+                autoplay
+                muted
+                playsinline
+                preload="auto"
+                disablepictureinpicture
+            ></video>
+            <video
+                id="supportLinkVideoB"
+                src="/videos/dlink-liquid-red-transparent.webm"
+                muted
+                playsinline
+                preload="auto"
+                disablepictureinpicture
+            ></video>
+            <div class="custom-subtitle" id="customSubtitle"></div>
+        </div>
+    </div>
+
+    <script>
+        const params = new URLSearchParams(window.location.search);
+        let uid = params.get('uid') || 'board_XXXX';
+        let accentColor = params.get('color') || '#ff0000';
+        let scale = parseFloat(params.get('scale') || '1');
+        let offsetY = parseInt(params.get('offsetY') || '0');
+        let vAlign = params.get('vAlign') || 'center';
+        let hAlign = params.get('hAlign') || 'center';
+
+        const stage = document.getElementById('stage');
+        const stageInner = document.getElementById('stageInner');
+        const videoA = document.getElementById('supportLinkVideoA');
+        const videoB = document.getElementById('supportLinkVideoB');
+        const subtitle = document.getElementById('customSubtitle');
+
+        const videos = [videoA, videoB];
+        let currentIdx = 0;
+        let isTransitioning = false;
+        let currentFilter = '';
+
+        // CDN fallback in case local video isn't ready
+        const cdnUrl = 'https://alerts.tikoverlay.live/previews/widgets/support-link/dlink-liquid-red-transparent.webm';
+        videos.forEach(v => {
+            v.addEventListener('error', () => {
+                if (v.src !== cdnUrl) {
+                    console.log('Switching to CDN video source');
+                    v.src = cdnUrl;
+                    v.load();
+                }
+            }, { once: true });
+        });
+
+        // ================= Dynamic Color Filter ================= //
+        function hexToHsl(hex) {
+            let m = hex.replace('#', '').match(/^([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i);
+            if (!m) return { h: 0, s: 100, l: 50 };
+            let r = parseInt(m[1], 16) / 255;
+            let g = parseInt(m[2], 16) / 255;
+            let b = parseInt(m[3], 16) / 255;
+            let max = Math.max(r, g, b);
+            let min = Math.min(r, g, b);
+            let l = (max + min) / 2;
+            if (max === min) return { h: 0, s: 0, l: Math.round(l * 100) };
+            let d = max - min;
+            let s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+            let h;
+            if (max === r) h = (g - b) / d + (g < b ? 6 : 0);
+            else if (max === g) h = (b - r) / d + 2;
+            else h = (r - g) / d + 4;
+            h /= 6;
+            return { h: Math.round(h * 360), s: Math.round(s * 100), l: Math.round(l * 100) };
+        }
+
+        function getColorFilter(colorHex) {
+            let { h, s, l } = hexToHsl(colorHex || '#ff0000');
+            if (s < 8) {
+                return `grayscale(1) brightness(${Math.max(0.35, Math.min(1.35, l / 50)).toFixed(3)})`;
+            }
+            let sat = Math.max(0.55, Math.min(1.45, s / 100));
+            let bri = Math.max(0.75, Math.min(1.25, l / 50));
+            return `hue-rotate(${h}deg) saturate(${sat.toFixed(3)}) brightness(${bri.toFixed(3)})`;
+        }
+
+        function applyFilter(filterStr) {
+            currentFilter = filterStr;
+            videos.forEach(v => {
+                v.style.filter = filterStr;
+            });
+        }
+
+        function applySettings(settings) {
+            if (!settings) return;
+            const color = settings.accentColor || settings.color || accentColor;
+            applyFilter(getColorFilter(color));
+
+            // Position & Scale
+            const sc = settings.scale || scale;
+            const offY = settings.offsetY !== undefined ? settings.offsetY : offsetY;
+            const va = settings.vAlign || vAlign;
+            const ha = settings.hAlign || hAlign;
+
+            if (va === 'top') {
+                stage.style.alignItems = 'flex-start';
+                stage.style.paddingTop = '30px';
+                stage.style.paddingBottom = '0px';
+            } else if (va === 'bottom') {
+                stage.style.alignItems = 'flex-end';
+                stage.style.paddingBottom = '30px';
+                stage.style.paddingTop = '0px';
+            } else {
+                stage.style.alignItems = 'center';
+                stage.style.paddingTop = '0px';
+                stage.style.paddingBottom = '0px';
+            }
+
+            if (ha === 'right') {
+                stage.style.justifyContent = 'flex-end';
+                stage.style.paddingRight = '30px';
+                stage.style.paddingLeft = '0px';
+            } else if (ha === 'left') {
+                stage.style.justifyContent = 'flex-start';
+                stage.style.paddingLeft = '30px';
+                stage.style.paddingRight = '0px';
+            } else {
+                stage.style.justifyContent = 'center';
+                stage.style.paddingLeft = '0px';
+                stage.style.paddingRight = '0px';
+            }
+
+            stageInner.style.transform = `translateY(${offY}px) scale(${sc})`;
+
+            if (settings.subtitle && settings.subtitle.trim()) {
+                subtitle.textContent = settings.subtitle.trim();
+                subtitle.classList.add('show');
+            } else {
+                subtitle.classList.remove('show');
+            }
+        }
+
+        // ================= Seamless Dual-Video Looping Engine ================= //
+        function setupVideo(v, shouldAutoPlay) {
+            v.playsInline = true;
+            v.muted = true;
+            v.loop = false;
+            v.removeAttribute('loop');
+
+            const onReady = () => {
+                try {
+                    if (Number.isFinite(v.duration) && v.duration > 0.48) {
+                        v.currentTime = 0.28;
+                    }
+                } catch (e) {}
+                if (shouldAutoPlay) {
+                    let p = v.play();
+                    if (p && typeof p.catch === 'function') p.catch(() => {});
+                }
+            };
+
+            if (v.readyState >= 1) onReady();
+            else v.addEventListener('loadedmetadata', onReady, { once: true });
+
+            v.addEventListener('timeupdate', onTimeUpdate);
+            v.addEventListener('ended', () => {
+                if (v === videos[currentIdx]) switchVideos();
+            });
+        }
+
+        function onTimeUpdate(e) {
+            const activeVid = e.currentTarget;
+            if (activeVid !== videos[currentIdx] || isTransitioning) return;
+            const dur = activeVid.duration;
+            if (!Number.isFinite(dur) || dur <= 0) return;
+
+            // When reaching 0.55s before end, transition to the other video seamlessly
+            if (activeVid.currentTime >= dur - 0.55) {
+                switchVideos();
+            }
+        }
+
+        function switchVideos() {
+            if (isTransitioning) return;
+            const currentVid = videos[currentIdx];
+            if (!currentVid.duration || currentVid.duration <= 1.0) {
+                currentVid.currentTime = 0.28;
+                let p = currentVid.play();
+                if (p && p.catch) p.catch(() => {});
+                return;
+            }
+
+            isTransitioning = true;
+            const nextIdx = 1 - currentIdx;
+            const nextVid = videos[nextIdx];
+
+            nextVid.playsInline = true;
+            nextVid.muted = true;
+            if (currentFilter) nextVid.style.filter = currentFilter;
+
+            try {
+                if (Number.isFinite(nextVid.duration) && nextVid.duration > 0.48) {
+                    nextVid.currentTime = 0.28;
+                }
+            } catch (e) {}
+
+            let p = nextVid.play();
+            if (p && p.catch) p.catch(() => {});
+
+            const performSwap = () => {
+                nextVid.classList.add('is-active');
+                currentVid.classList.remove('is-active');
+                try { currentVid.pause(); } catch (e) {}
+                currentIdx = nextIdx;
+                isTransitioning = false;
+            };
+
+            const onPlaying = () => {
+                nextVid.removeEventListener('playing', onPlaying);
+                requestAnimationFrame(() => requestAnimationFrame(performSwap));
+            };
+
+            if (nextVid.readyState >= 2 && Math.abs((nextVid.currentTime || 0) - 0.28) < 0.12) {
+                performSwap();
+            } else {
+                nextVid.addEventListener('playing', onPlaying, { once: true });
+                nextVid.addEventListener('seeked', onPlaying, { once: true });
+                setTimeout(() => { if (isTransitioning) performSwap(); }, 180);
+            }
+        }
+
+        setupVideo(videoA, true);
+        setupVideo(videoB, false);
+
+        // ================= Message & Fetch Settings ================= //
+        window.addEventListener('message', (e) => {
+            const data = e.data;
+            if (!data) return;
+            if (data.type === 'support_link_settings_update' || data.type === 'support_link_preview_settings') {
+                const s = data.settings || data.data?.settings || data;
+                applySettings(s);
+            }
+        });
+
+        async function fetchSettings() {
+            try {
+                const res = await fetch(`/api/support-link/${encodeURIComponent(uid)}?t=${Date.now()}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    applySettings(data.settings || data);
+                    return;
+                }
+            } catch (e) {}
+
+            try {
+                const res = await fetch(`/api/widget/support-link/settings?uid=${encodeURIComponent(uid)}&t=${Date.now()}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    applySettings(data.settings || data);
+                }
+            } catch (e) {}
+        }
+
+        applySettings({ accentColor, scale, offsetY, vAlign, hAlign });
+        fetchSettings();
+        setInterval(fetchSettings, 3000);
+    </script>
+</body>
+</html>
